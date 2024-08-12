@@ -1,0 +1,12 @@
+# Starting the web-view on this address and port
+listen = "127.0.0.1:8080"
+# This is an address of Stalwart Web UI
+url = "http://127.0.0.1:8080"
+# Admin password
+credentials = "admin password"
+# Quota of all created users
+quota = 1073741824 # One GB
+# The domain part of newly created addresses
+domain = "my-mail-server.com"
+# If you want auto-registered users have one group, use this
+group = "guests"

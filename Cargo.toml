@@ -1,0 +1,21 @@
+[package]
+name = "stalwart-reg"
+version = "1.0.0"
+edition = "2021"
+description = "Provides a simple auto-registration form to create accounts on Stalwart mail server"
+authors = ["Revertron <github@r3v.dev>"]
+keywords = ["mail", "registration", "form", "stalwart"]
+categories = ["authentication"]
+
+[dependencies]
+axum = { version = "0.7.5", features = ["macros"] }
+captcha-rs = "0.2.10"
+clap = { version = "4.5.15", features = ["derive"] }
+dashmap = "6.0.1"
+http = "1.1.0"
+include_dir = "0.7.4"
+lazy_static = "1.5.0"
+rand = "0.8.5"
+serde = { version = "1.0.207", features = ["derive"] }
+tokio = { version = "1.39.2", features = ["rt-multi-thread", "signal"] }
+toml = "0.8.19"

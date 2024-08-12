@@ -1,0 +1,68 @@
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.ui.container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+}
+
+.ui.footer {
+    text-align: center;
+    padding: 1em 0;
+}
+
+.ui.form {
+    width: 100%;
+}
+
+.ui.modal {
+    top: 20%;
+}
+
+.hidden {
+    display: none;
+}
+
+@media only screen and (min-width: 1200px) {
+    .ui.form {
+        max-width: 50%;
+    }
+}
+
+@font-face {
+    font-family: 'Lato';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Lato'),
+    url('fonts/lato/Lato-Regular.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Lato';
+    font-style: normal;
+    font-weight: 700;
+    src: local('Lato Bold'),
+    url('fonts/lato/Lato-Bold.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Lato';
+    font-style: italic;
+    font-weight: 400;
+    src: local('Lato Italic'),
+    url('fonts/lato/Lato-Italic.ttf') format('truetype');
+}
+
+@font-face {
+    font-family: 'Lato';
+    font-style: italic;
+    font-weight: 700;
+    src: local('Lato Bold Italic'),
+    url('fonts/lato/Lato-BoldItalic.ttf') format('truetype');
+}

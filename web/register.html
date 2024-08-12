@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register</title>
+    <link rel="stylesheet" href="semantic.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="ui container">
+    <form class="ui form" method="post" action="/register">
+        <h2 class="ui header">Register an account</h2>
+        <div class="field">
+            <label>Username</label>
+            <div class="ui right labeled input">
+                <input type="text" class="right labeled" name="username" placeholder="Username">
+                <div class="ui basic label">@{domain}</div>
+            </div>
+        </div>
+        <div class="two fields">
+            <div class="field">
+                <label>Password</label>
+                <input type="password" name="password" placeholder="Password">
+            </div>
+            <div class="field">
+                <label>Repeat password</label>
+                <input type="password" name="password2" placeholder="Password again">
+            </div>
+        </div>
+        <input name="session" type="hidden" value="{session}">
+        <div class="fields">
+            <div class="field">
+                <label>Captcha</label>
+                <img src="{captcha}" alt="Enter symbols from this picture into the next field."/>
+            </div>
+            <div class="field" style="width: 100%;">
+                <label>Text from the captcha</label>
+                <input name="captcha" autocomplete="off" placeholder="Enter symbols from picture">
+            </div>
+            <div class="field">
+                <label>&nbsp;</label>
+                <button class="ui green centered button" type="submit" style="width: 100%; height: 38px;">Register</button>
+            </div>
+        </div>
+    </form>
+</div>
+</body>
+</html>
