@@ -4,6 +4,24 @@ body {
     min-height: 100vh;
 }
 
+body.inverted {
+    background: #212830;
+    color: #d1d7e0;
+}
+
+.ui.inverted.form input:not([type]), .ui.inverted.form input[type="date"], .ui.inverted.form input[type="datetime-local"], .ui.inverted.form input[type="email"], .ui.inverted.form input[type="file"], .ui.inverted.form input[type="number"], .ui.inverted.form input[type="password"], .ui.inverted.form input[type="search"], .ui.inverted.form input[type="tel"], .ui.inverted.form input[type="text"], .ui.inverted.form input[type="time"], .ui.inverted.form input[type="url"] {
+    background: #182027;
+    border-color: rgba(255,255,255,.1);
+    color: #d1d7e0;
+    box-shadow: none;
+}
+
+.ui.inverted.label, .ui.inverted.labels .label {
+    background: #182027;
+    border-color: rgba(255,255,255,.1);
+    color: #d1d7e0;
+}
+
 .ui.container {
     flex: 1;
     display: flex;
@@ -65,4 +83,18 @@ body {
     font-weight: 700;
     src: local('Lato Bold Italic'),
     url('fonts/lato/Lato-BoldItalic.ttf') format('truetype');
+}
+
+/*@font-face {
+    font-family: 'Icons';
+    font-style: normal;
+    font-weight: 900;
+    src: local('Icons'),
+    url('fonts/icons/fa-solid-900.ttf') format('truetype');
+}*/
+
+@font-face{
+    font-family:Icons;
+    src:url(fonts/icons/fa-solid-900.eot);
+    src:url(fonts/icons/fa-solid-900.eot?#iefix) format('embedded-opentype'),url(fonts/icons/fa-solid-900.woff2) format('woff2'),url(fonts/icons/fa-solid-900.woff) format('woff'),url(fonts/icons/fa-solid-900.ttf) format('truetype'),url(fonts/icons/fa-solid-900.svg#icons) format('svg');
 }

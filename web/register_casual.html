@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register</title>
+    <link rel="stylesheet" href="semantic.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="inverted">
+<div class="ui inverted container">
+    <form class="ui inverted form" method="post" action="/register_casual">
+        <h2 class="ui inverted header">Register an account</h2>
+        <p>The first step to privacy! Register a new account. Save your password or create your own.</p>
+        <div class="field">
+            <label>Username</label>
+            <div class="ui inverted right labeled input">
+                <input type="text" class="right labeled" name="username" placeholder="Username" value="{username}" style="width: 50%;">
+                <div class="ui inverted basic label">@{domain}</div>
+            </div>
+        </div>
+        <div class="ui field inverted">
+            <label>Password</label>
+            <div class="ui icon input inverted">
+                <input type="password" name="password" placeholder="Password" value="{pass}" id="pass">
+                <i class="inverted eye link icon" id="eye"></i>
+            </div>
+        </div>
+        <input name="invite" type="hidden" value="{invite}">
+        <div class="field">
+            <label>&nbsp;</label>
+            <button class="ui inverted green centered button" type="submit" style="width: 100%; height: 38px;">Register</button>
+        </div>
+    </form>
+</div>
+<script>
+    const passwordInput = document.getElementById('pass');
+    const eyeIcon = document.getElementById('eye');
+
+    eyeIcon.addEventListener('click', function() {
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            eyeIcon.classList.add('slash');
+        } else {
+            passwordInput.type = 'password';
+            eyeIcon.classList.remove('slash');
+        }
+    });
+</script>
+</body>
+</html>

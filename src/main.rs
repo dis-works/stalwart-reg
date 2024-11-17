@@ -1,36 +1,45 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
-use std::net::SocketAddr;
-use std::process::{Command, exit, Stdio};
-use std::sync::{Arc, RwLock};
+mod qr_code;
+mod diceware;
+mod api;
+
+use crate::diceware::generate_passphrase;
+use crate::qr_code::generate_qr_code;
+use axum::body::Body;
+use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::{
     extract::Form,
     http::{HeaderMap, HeaderValue, StatusCode},
     response::IntoResponse,
-    Router,
     routing::get,
     routing::post,
+    Router,
 };
-use axum::body::Body;
-use axum::extract::{ConnectInfo, Path, State};
 use captcha_rs::CaptchaBuilder;
-use clap::{Arg, ArgAction, value_parser};
+use clap::{value_parser, Arg, ArgAction};
 use dashmap::DashMap;
 use http::Response;
-use include_dir::{Dir, include_dir};
+use include_dir::{include_dir, Dir};
 use lazy_static::lazy_static;
 use rand::Rng;
 use serde::Deserialize;
-use tokio::time::Instant;
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::Read;
+use std::net::SocketAddr;
+use std::process::exit;
+use std::sync::{Arc, RwLock};
 use tokio::signal;
+use tokio::time::Instant;
 
-static PROGRAM: &'static str = "stalwart-cli";
 static FONTS_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/web/fonts");
 
 lazy_static! {
     static ref REGISTER_HTML: &'static str = include_str!("../web/register.html");
+    static ref REG_CASUAL_HTML: &'static str = include_str!("../web/register_casual.html");
+    static ref INVITE_HTML: &'static str = include_str!("../web/invite.html");
+    static ref INVITE_RES_HTML: &'static str = include_str!("../web/invite_result.html");
     static ref SUCCESS_HTML: &'static str = include_str!("../web/success.html");
+    static ref NEXT_HTML: &'static str = include_str!("../web/next.html");
     static ref ERROR_HTML: &'static str = include_str!("../web/error.html");
     static ref SEMANTIC_CSS: &'static str = include_str!("../web/semantic.min.css");
     static ref ADDITIONAL_CSS: &'static str = include_str!("../web/style.css");
@@ -46,11 +55,20 @@ struct RegistrationForm {
     captcha: String,
     #[serde(default)]
     session: String,
+    #[serde(default)]
+    invite: String,
 }
 
-async fn show_register(State(state): State<Arc<RwLock<AppState>>>, ConnectInfo(addr): ConnectInfo<SocketAddr>) -> Result<impl IntoResponse, StatusCode> {
-    let ip = addr.to_string();
+#[derive(Deserialize)]
+struct RegCasualForm {
+    username: String,
+    password: String,
+    #[serde(default)]
+    invite: String,
+}
 
+async fn show_register(State(state): State<Arc<RwLock<AppState>>>, ConnectInfo(addr): ConnectInfo<SocketAddr>, Query(params): Query<HashMap<String, String>>) -> Result<impl IntoResponse, StatusCode> {
+    let ip = addr.to_string();
     {
         let now = Instant::now();
         let time_window = std::time::Duration::from_secs(60); // 1 minute
@@ -76,25 +94,92 @@ async fn show_register(State(state): State<Arc<RwLock<AppState>>>, ConnectInfo(a
         request_times.push(now);
     }
 
-    let captcha = CaptchaBuilder::new()
-        .length(6)
-        .width(130)
-        .height(38)
-        .dark_mode(false)
-        .complexity(6) // min: 1, max: 10
-        .compression(40) // min: 1, max: 99
-        .build();
-    let session = random_string(32);
-    state.write().unwrap().captcha.insert(session.clone(), captcha.text.to_lowercase());
-    let state = state.read().unwrap();
-    let html = REGISTER_HTML
-        .replace("{domain}", &state.config.domain)
-        .replace("{captcha}", &captcha.to_base64())
-        .replace("{session}", &session);
+    let invite = match params.get("invite") {
+        None => String::new(),
+        Some(s) => s.to_string()
+    };
+    let html = if state.read().unwrap().config.casual_mode {
+        let username = generate_passphrase(2, '.');
+        let passphrase = generate_passphrase(6, '-');
+        let state = state.read().unwrap();
+        REG_CASUAL_HTML
+            .replace("{domain}", &state.config.domain)
+            .replace("{username}", &username)
+            .replace("{pass}", &passphrase)
+            .replace("{invite}", &invite)
+    } else {
+        let captcha = CaptchaBuilder::new()
+            .length(6)
+            .width(130)
+            .height(38)
+            .dark_mode(true)
+            .complexity(5) // min: 1, max: 10
+            .compression(40) // min: 1, max: 99
+            .build();
+        let session = random_string(32);
+        state.write().unwrap().captcha.insert(session.clone(), captcha.text.to_lowercase());
+        let state = state.read().unwrap();
+        REGISTER_HTML
+            .replace("{domain}", &state.config.domain)
+            .replace("{captcha}", &captcha.to_base64())
+            .replace("{session}", &session)
+            .replace("{invite}", &invite)
+    };
     Ok(Response::builder()
         .status(StatusCode::OK)
         .body(Body::from(html))
         .unwrap())
+}
+
+async fn show_invite(State(state): State<Arc<RwLock<AppState>>>) -> Result<impl IntoResponse, StatusCode> {
+    let pass = state.read().unwrap().config.invite_pass.clone();
+    if pass.is_empty() {
+        let error = "<p>Set password in config: <code>invite_pass = \"good-password\"</code> and then use this page to generate invite links</p>";
+        let html = INVITE_HTML.replace("<!--error-->", error);
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .body(html)
+            .unwrap())
+    }
+    Ok(Response::builder().status(StatusCode::OK).body(INVITE_HTML.to_string()).unwrap())
+}
+
+async fn handle_invite(State(state): State<Arc<RwLock<AppState>>>, headers: HeaderMap, Form(params): Form<HashMap<String, String>>) -> Result<impl IntoResponse, StatusCode> {
+    let pass = state.read().unwrap().config.invite_pass.clone();
+    if pass.is_empty() {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    match params.get("password") {
+        None => Err(StatusCode::UNAUTHORIZED),
+        Some(password) => {
+            if !pass.eq(password) {
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+            let random = random_string(24);
+            let origin = match extract_origin(&headers) {
+                None => return Err(StatusCode::BAD_REQUEST),
+                Some(origin) => origin
+            };
+            let invite_link = format!("{origin}/?invite={}", &random);
+            state.write().unwrap().invites.insert(random);
+            let html = INVITE_RES_HTML.replace("{link}", &invite_link);
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .body(html)
+                .unwrap())
+        }
+    }
+}
+
+fn extract_origin(headers: &HeaderMap) -> Option<String> {
+    if headers.contains_key("origin") {
+        return Some(String::from_utf8_lossy(headers.get("origin").unwrap().as_bytes()).to_string());
+    }
+    if headers.contains_key("host") {
+        let host = String::from_utf8_lossy(headers.get("host").unwrap().as_bytes()).to_string();
+        return Some(format!("https://{host}"));
+    }
+    None
 }
 
 async fn send_favicon() -> impl IntoResponse {
@@ -106,6 +191,15 @@ async fn send_favicon() -> impl IntoResponse {
         .unwrap()
 }
 
+async fn send_next() -> impl IntoResponse {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "text/html")
+        .header("Cache-Control", "public, max-age=2592000")
+        .body(NEXT_HTML.to_string())
+        .unwrap()
+}
+
 async fn handle_register(State(state): State<Arc<RwLock<AppState>>>, Form(input): Form<RegistrationForm>) -> Result<impl IntoResponse, StatusCode> {
     if input.password != input.password2 {
         return Ok(Response::builder()
@@ -114,8 +208,7 @@ async fn handle_register(State(state): State<Arc<RwLock<AppState>>>, Form(input)
             .unwrap());
     }
 
-    let valid_username = input.username.len() < 20 && input.username.chars().all(|c| c.is_alphanumeric());
-    if !valid_username {
+    if !valid_username(&input.username) {
         return Ok(Response::builder()
             .status(StatusCode::BAD_REQUEST)
             .body(ERROR_HTML.replace("{error}", "Username contains invalid characters or is too long."))
@@ -138,83 +231,89 @@ async fn handle_register(State(state): State<Arc<RwLock<AppState>>>, Form(input)
     // Removing the challenge
     state.write().unwrap().captcha.remove(&input.session);
 
-    // Check if the account already exists
-    let check_account = Command::new(PROGRAM)
-        .arg("--url")
-        .arg(&config.url)
-        .arg("--credentials")
-        .arg(&config.credentials)
-        .arg("account")
-        .arg("display")
-        .arg(&username)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
-
-    let out = match check_account {
-        Ok(child) => child.wait_with_output(),
-        Err(e) => {
-            println!("Error running '{}': {e}", &PROGRAM);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
-
-    if out.is_ok() {
-        let out = out.unwrap();
-        println!("Status: {}", &out.status);
-        if out.status.success() {
-            return Ok(Response::builder()
-                .status(StatusCode::CONFLICT)
-                .body(ERROR_HTML.replace("{error}", "This account already exists."))
-                .unwrap());
-        }
+    if !config.invite_pass.is_empty() && !state.read().unwrap().invites.contains(&input.invite) {
+        println!("Wrong invite code");
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(ERROR_HTML.replace("{error}", "Wrong invite link, get a new one from your inviter."))
+            .unwrap());
     }
 
-    // Account does not exist, create it
-    let create_account = Command::new(PROGRAM)
-        .arg("--url")
-        .arg(&config.url)
-        .arg("--credentials")
-        .arg(&config.credentials)
-        .arg("account")
-        .arg("create")
-        .args({
-            match config.quota == 0 {
-                true => vec![],
-                false => vec![String::from("--quota"), config.quota.to_string()]
-            }
-        })
-        .args({
-            match config.group.is_empty() {
-                true => vec![],
-                false => vec!["--member-of", &config.group]
-            }
-        })
-        .arg("--addresses")
-        .arg(format!("{}@{}", &username, &config.domain))
-        .arg(&username)
-        .arg(&password)
-        .spawn();
+    // Removing invite code
+    if !config.invite_pass.is_empty() {
+        state.write().unwrap().invites.remove(&input.invite);
+    }
 
-    match create_account {
-        Ok(mut child) => {
-            match child.wait() {
-                Ok(status) => {
-                    println!("Account creation status: {status}");
-                    return Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .body(SUCCESS_HTML.to_string())
-                        .unwrap());
-                }
-                Err(e) => {
-                    println!("Account creation error: {e}");
-                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
-                }
-            }
+    create_user_by_api(&username, &password, &config).await
+}
+
+async fn handle_register_casual(State(state): State<Arc<RwLock<AppState>>>, Form(input): Form<RegCasualForm>) -> Result<impl IntoResponse, StatusCode> {
+    if input.password.chars().count() < 8 {
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(ERROR_HTML.replace("{error}", "Passwords must be at least 8 symbols long."))
+            .unwrap());
+    }
+
+    if !valid_username(&input.username) {
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(ERROR_HTML.replace("{error}", "Username contains invalid characters or is too long."))
+            .unwrap());
+    }
+
+    let username = input.username.clone();
+    let password = input.password.clone();
+    let config = state.read().unwrap().config.clone();
+    println!("Trying to register user {}@{}...", &username, &config.domain);
+
+    if !config.invite_pass.is_empty() && !state.read().unwrap().invites.contains(&input.invite) {
+        println!("Wrong invite code");
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body(ERROR_HTML.replace("{error}", "Wrong invite link, get a new one from your inviter."))
+            .unwrap());
+    }
+
+    // Removing invite code
+    if !config.invite_pass.is_empty() {
+        state.write().unwrap().invites.remove(&input.invite);
+    }
+
+    create_user_by_api(&username, &password, &config).await
+}
+
+fn valid_username(username: &str) -> bool {
+    username.chars().count() < 20 && username.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+}
+
+async fn create_user_by_api(username: &str, password: &str, config: &Config) -> Result<Response<String>, StatusCode> {
+    let user = api::NewUser::new(
+        username.to_string(),
+        format!("{}@{}", &username, &config.domain),
+        password.to_string(),
+        config.group.clone(),
+        config.quota
+    );
+    match api::create_user(&config.url, "admin", &config.credentials, user).await {
+        Ok(id) => {
+            println!("Created user with Id: {id}");
+            let domain = &config.domain;
+            let password = urlencoding::encode(&password);
+            let url = format!("dclogin://{username}@{domain}/?p={password}&iu={username}&su={username}&v=1");
+            let qr = generate_qr_code(&url).unwrap_or_else(|e| e.to_string());
+            let html = SUCCESS_HTML.replace("<!--qr-->", &qr).replace("{url}", &url);
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .body(html)
+                .unwrap())
         }
         Err(e) => {
-            println!("Account creation error: {e}");
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            println!("Error: {e}");
+            Ok(Response::builder()
+                .status(StatusCode::CONFLICT)
+                .body(ERROR_HTML.replace("{error}", "This account already exists."))
+                .unwrap())
         }
     }
 }
@@ -274,6 +373,10 @@ struct Config {
     quota: u64,
     domain: String,
     group: String,
+    #[serde(default)]
+    invite_pass: String,
+    #[serde(default)]
+    casual_mode: bool
 }
 
 impl Config {
@@ -304,6 +407,7 @@ impl Config {
 struct AppState {
     config: Config,
     captcha: HashMap<String, String>,
+    invites: HashSet<String>,
     rate_limiter: Arc<DashMap<String, Vec<Instant>>>
 }
 
@@ -353,9 +457,13 @@ async fn main() {
     let app = Router::new()
         .route("/", get(show_register))
         .route("/register", post(handle_register))
+        .route("/register_casual", post(handle_register_casual))
+        .route("/invite", get(show_invite))
+        .route("/invite", post(handle_invite))
         .route("/favicon.ico", get(send_favicon))
         .route("/semantic.min.css", get(serve_semantic_css))
         .route("/style.css", get(serve_additional_css))
+        .route("/next", get(send_next))
         .route("/fonts/:font/:filename", get(serve_font))
         .with_state(state.clone());
 

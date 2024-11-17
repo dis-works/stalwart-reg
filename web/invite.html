@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invite</title>
+    <link rel="stylesheet" href="semantic.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="inverted">
+<div class="ui inverted container">
+    <form class="ui inverted form" method="post" action="/invite">
+        <h2 class="ui inverted header">Generate invitation link</h2>
+        <!--error-->
+        <div class="field inverted">
+            <label>Admin password</label>
+            <input type="password" name="password" placeholder="Password">
+        </div>
+        <div class="field inverted">
+            <label>&nbsp;</label>
+            <button class="ui inverted green centered button" type="submit" style="width: 100%; height: 38px;">Get link</button>
+        </div>
+    </form>
+</div>
+</body>
+</html>
